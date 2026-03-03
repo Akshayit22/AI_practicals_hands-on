@@ -1,0 +1,43 @@
+# Core LangChain + OpenAI
+langchain==0.3.27
+langchain-core==0.3.72
+langchain-community==0.3.27
+langchain-openai==0.3.27
+openai==1.109.1
+
+# Vector store
+faiss-cpu==1.12.0
+azure-search-documents
+azure-core
+
+# Data handling
+pandas==2.2.2
+
+# Excel / Word / PowerPoint
+msoffcrypto-tool==5.4.2
+python-docx==1.2.0
+python-pptx==1.0.2
+
+# NLP utilities
+nltk==3.9.2
+
+# EPUB / Pandoc
+pypandoc==1.15
+pandoc==2.4
+
+# PDF & image stack
+PyMuPDF==1.26.5          # import name: fitz / pymupdf
+pdfminer.six==20250506
+pdf2image==1.17.0
+pillow==11.3.0
+pillow_heif==1.1.1
+pi_heif==1.1.1
+
+# Unstructured ingestion
+unstructured==0.18.15
+unstructured-inference==1.0.5
+unstructured.pytesseract==0.3.15
+python-magic==0.4.27
+
+# Display helpers used in the notebook
+ipython==7.34.0
