@@ -26,16 +26,16 @@ from langchain_core.documents import Document
 # ─────────────────────────────────────────────
 
 # Azure OpenAI
-os.environ["AZURE_OPENAI_API_KEY"]  = "your-azure-openai-key"
-os.environ["AZURE_OPENAI_ENDPOINT"] = "https://your-resource.openai.azure.com/"
+os.environ["AZURE_OPENAI_API_KEY"]  = "***REMOVED-AZURE-OPENAI-KEY***"
+os.environ["AZURE_OPENAI_ENDPOINT"] = "https://akstel395.openai.azure.com/"
 
 AZURE_EMBEDDING_DEPLOYMENT = "text-embedding-3-large"   # your embedding deployment name
 AZURE_CHAT_DEPLOYMENT      = "gpt-4o"                   # your chat deployment name
 AZURE_API_VERSION          = "2024-08-01-preview"
 
 # Azure AI Search
-os.environ["AZURE_SEARCH_ENDPOINT"] = "https://your-search-service.search.windows.net"
-os.environ["AZURE_SEARCH_KEY"]      = "your-azure-search-admin-key"
+os.environ["AZURE_SEARCH_ENDPOINT"] = "https://akshay395.search.windows.net"
+os.environ["AZURE_SEARCH_KEY"]      = "***REMOVED-AZURE-SEARCH-KEY***"
 
 AZURE_SEARCH_INDEX = "food-reviews-index"   # index name — auto-created on first run
 
@@ -140,8 +140,10 @@ def generate_answer(vector_store: AzureSearch, query: str, k: int = 5) -> str:
     retrieved = vector_store.similarity_search_with_relevance_scores(query, k=k)
     context = "\n\n".join(doc.page_content for doc, _score in retrieved)
 
-    prompt = f"""Answer the question below using only the provided context.
-If the answer is not in the context, say "I don't know."
+    prompt = f"""You are a helpful assistant. Use the context below to answer the question.
+The context contains product reviews with fields: ProductId, Score, Summary, and Text.
+Answer directly and clearly based on what is in the context.
+If truly nothing relevant exists in the context, say "I don't know."
 
 Question: {query}
 
@@ -166,27 +168,43 @@ Context:
 
 
 # ─────────────────────────────────────────────
+# STEP 6 — Interactive chat loop
+# ─────────────────────────────────────────────
+
+def chat_loop(vector_store: AzureSearch) -> None:
+    """Keep asking the user for questions until they type 'exit' or 'quit'."""
+    print("\n=== RAG Chat Ready ===")
+    print("Type your question and press Enter. Type 'exit' to quit.\n")
+
+    while True:
+        query = input("You: ").strip()
+
+        if not query:
+            continue
+
+        if query.lower() in ("exit", "quit"):
+            print("Goodbye!")
+            break
+
+        answer = generate_answer(vector_store, query)
+        print(f"\nAnswer:\n{answer}")
+        print("-" * 60)
+
+
+# ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     # --- Load data ---
-    docs = prepare_data(DATA_FILE)
+    # docs = prepare_data(DATA_FILE, 20)
 
     # --- First run: index documents ---
-    vector_store = index_documents(docs)
+    # vector_store = index_documents(docs)
 
     # --- Later runs: load existing index (comment out index_documents above) ---
-    # vector_store = load_index()
+    vector_store = load_index()
+    print(vector_store)
 
-    # --- Ask questions ---
-    queries = [
-        "What are the best reviews?",
-        "Give me reviews with low scores and negative feedback.",
-        "List reviews where people suggest improvements.",
-    ]
-
-    for q in queries:
-        print(f"\nQ: {q}")
-        print("A:", generate_answer(vector_store, q))
-        print("-" * 60)
+    # --- Interactive chat loop ---
+    chat_loop(vector_store)
