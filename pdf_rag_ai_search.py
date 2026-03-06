@@ -1,20 +1,21 @@
 """
-Excel RAG with Azure OpenAI + Azure AI Search
-----------------------------------------------
-Builds a production RAG pipeline for Excel/CSV files using:
-  - Azure OpenAI  : embeddings (text-embedding-3-large) + chat (gpt-4o)
-  - Azure AI Search : vector store (replaces local Chroma)
+PDF RAG with Azure OpenAI + Azure AI Search
+--------------------------------------------
+Builds a RAG pipeline for PDF files (including large books) using:
+  - PyMuPDF (fitz)  : PDF text extraction with page metadata
+  - Azure OpenAI    : embeddings (text-embedding-3-large) + chat (gpt-4o)
+  - Azure AI Search : vector store
 
 Usage
 -----
 1. Fill in your credentials in the CONFIG section below.
-2. First run  : uncomment `vector_store = index_documents(docs)` — indexes data
-3. Later runs : use `vector_store = load_index()` — skips re-indexing
-4. Run        : python excel_rag_ai_search.py
+2. First run  : uses index_documents() — extracts, chunks, indexes PDF
+3. Later runs : uses load_index()      — skips re-indexing
+4. Run        : python pdf_rag_ai_search.py
 """
 
 import os
-import pandas as pd
+import fitz  # PyMuPDF
 from datetime import datetime
 
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
@@ -38,35 +39,56 @@ AZURE_API_VERSION          = "2024-08-01-preview"
 os.environ["AZURE_SEARCH_ENDPOINT"] = "https://akshay395.search.windows.net"
 os.environ["AZURE_SEARCH_KEY"]      = "***REMOVED-AZURE-SEARCH-KEY***"
 
-AZURE_SEARCH_INDEX = "food-reviews-index"   # index name — auto-created on first run
+AZURE_SEARCH_INDEX = "pdf-rag-index-policy-doc"   # auto-created on first run
 
-# Data file
-DATA_FILE = "data/food_reviews_1k.csv"      # supports .csv and .xlsx
-
+# PDF files — add as many as needed, all go into the same index
+PDF_FILES = [
+    # "data/Famous old receipts.pdf",
+    "data/Misconduct_Under_Presidio_India_HR_Policy.pdf",
+]
 
 # ─────────────────────────────────────────────
-# STEP 1 — Load Excel / CSV file
+# STEP 1 — Load PDF and extract text per page
 # ─────────────────────────────────────────────
 
-def prepare_data(file_path: str, max_rows: int = None) -> list[Document]:
-    """Load a CSV or Excel file and convert each row into a LangChain Document."""
-    if file_path.endswith(".csv"):
-        df = pd.read_csv(file_path)
-    else:
-        df = pd.read_excel(file_path)
+def prepare_pdf(file_path: str) -> list[Document]:
+    """
+    Extract text from each PDF page using PyMuPDF.
+    Each page becomes one Document with page number stored in metadata.
+    """
+    docs = []
+    pdf = fitz.open(file_path)
 
-    if max_rows:
-        df = df.head(max_rows)
+    for page_num in range(len(pdf)):
+        page = pdf[page_num]
+        text = page.get_text().strip()
 
-    docs = [
-        Document(
-            page_content="\n".join(f"{col}: {val}" for col, val in row.items()),
-            metadata={"row_index": int(i)}
+        if not text:          # skip blank pages (images-only pages)
+            continue
+
+        docs.append(
+            Document(
+                page_content=text,
+                metadata={
+                    "source": os.path.basename(file_path),
+                    "page": page_num + 1,          # 1-based page number
+                    "total_pages": len(pdf),
+                }
+            )
         )
-        for i, row in df.iterrows()
-    ]
-    print(f"[load]  {len(docs)} rows loaded from '{file_path}'")
+
+    pdf.close()
+    print(f"[load]  {len(docs)} pages extracted from '{file_path}'")
     return docs
+
+
+def prepare_multiple_pdfs(file_paths: list[str]) -> list[Document]:
+    """Load multiple PDF files and combine into a single list of Documents."""
+    all_docs = []
+    for file_path in file_paths:
+        all_docs.extend(prepare_pdf(file_path))
+    print(f"[load]  {len(all_docs)} total pages across {len(file_paths)} PDF(s)")
+    return all_docs
 
 
 # ─────────────────────────────────────────────
@@ -90,10 +112,10 @@ def get_embeddings() -> AzureOpenAIEmbeddings:
 
 def index_documents(
     docs: list[Document],
-    chunk_size: int = 500,
-    chunk_overlap: int = 50,
+    chunk_size: int = 1500,      # larger than CSV — book sentences need more context
+    chunk_overlap: int = 150,    # higher overlap — avoid cutting mid-sentence
 ) -> AzureSearch:
-    """Chunk docs → embed → push to Azure AI Search index."""
+    """Chunk pages → embed → push to Azure AI Search index."""
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -133,38 +155,49 @@ def load_index() -> AzureSearch:
 
 
 # ─────────────────────────────────────────────
-# STEP 5 — RAG: retrieve + generate answer
+# STEP 5 — RAG: retrieve + generate answer with page citations
 # ─────────────────────────────────────────────
 
-MAX_HISTORY_TURNS = 10   # keep last N turns (each turn = 1 user + 1 assistant message)
+MAX_HISTORY_TURNS = 10
 
 
 def generate_answer(
     vector_store: AzureSearch,
     query: str,
     chat_history: list,
-    k: int = 5,
+    k: int = 8,
 ) -> str:
-    """Retrieve top-k chunks and generate an answer, passing chat history for memory."""
+    """
+    Retrieve top-k chunks and generate an answer with page citations and chat memory.
+    """
     retrieved = vector_store.similarity_search_with_relevance_scores(query, k=k)
-    context = "\n\n".join(doc.page_content for doc, _ in retrieved)
+
+    # Print retrieved sources
+    # print("\n[retrieved sources]")
+    # for doc, score in retrieved:
+    #     print(f"  {doc.metadata.get('source')} | Page {doc.metadata.get('page')} | score={score:.2f} | {doc.page_content[:80].strip()}...")
+
+    # Build context with file + page labels
+    context = "\n\n".join(
+        f"[{doc.metadata.get('source')} — Page {doc.metadata.get('page')}]:\n{doc.page_content}"
+        for doc, _ in retrieved
+    )
 
     system_message = {
         "role": "system",
         "content": (
-            "You are a helpful assistant. Use the retrieved context to answer questions.\n"
-            "The context contains product reviews with fields: ProductId, Score, Summary, and Text.\n"
-            "Answer directly and clearly. If nothing relevant exists in the context, say 'I don't know.'"
+            "You are a helpful assistant analyzing PDF documents.\n"
+            "Use the retrieved context to answer questions directly and clearly.\n"
+            "Cite the source file and page number(s) in your answer (e.g. 'According to airbnb-deck.pdf, page 5...').\n"
+            "If nothing relevant exists in the context, say 'I don't know.'"
         ),
     }
 
-    # Current user message includes the retrieved context
     user_message = {
         "role": "user",
         "content": f"Context:\n{context}\n\nQuestion: {query}",
     }
 
-    # Build full message list: system + trimmed history + current question
     messages = [system_message] + chat_history + [user_message]
 
     model = AzureChatOpenAI(
@@ -189,13 +222,11 @@ def generate_answer(
 # ─────────────────────────────────────────────
 
 def chat_loop(vector_store: AzureSearch) -> None:
-    """Keep asking the user for questions until they type 'exit' or 'quit'.
-    Maintains chat history as a context window across turns.
-    """
-    print("\n=== RAG Chat Ready ===")
+    """Keep asking the user for questions until they type 'exit' or 'quit'."""
+    print("\n=== PDF RAG Chat Ready ===")
     print("Type your question and press Enter. Type 'exit' to quit.\n")
 
-    chat_history = []   # stores previous turns as {role, content} dicts
+    chat_history = []
 
     while True:
         ts = datetime.now().strftime("%H:%M:%S")
@@ -213,12 +244,12 @@ def chat_loop(vector_store: AzureSearch) -> None:
         print(f"\n[{ts}] Answer:\n{answer}")
         print("-" * 60)
 
-        # Save this turn to history with timestamps
+        # Save turn to history with timestamps
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         chat_history.append({"role": "user",      "content": f"[{ts}] {query}"})
         chat_history.append({"role": "assistant", "content": f"[{ts}] {answer}"})
 
-        # Trim to last MAX_HISTORY_TURNS turns to avoid token overflow
+        # Trim to last MAX_HISTORY_TURNS
         chat_history = chat_history[-(MAX_HISTORY_TURNS * 2):]
 
 
@@ -227,15 +258,15 @@ def chat_loop(vector_store: AzureSearch) -> None:
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # --- Load data ---
-    # docs = prepare_data(DATA_FILE, 20)
+    # --- Load multiple PDFs ---
+    # docs = prepare_multiple_pdfs(PDF_FILES)
 
     # --- First run: index documents ---
     # vector_store = index_documents(docs)
 
-    # --- Later runs: load existing index (comment out index_documents above) ---
+    # --- Later runs: load existing index ---
     vector_store = load_index()
-    print(vector_store)
 
     # --- Interactive chat loop ---
     chat_loop(vector_store)
+#claude --resume 3e1e0a45-1bae-4e8e-98b4-6fa662a0fa00
