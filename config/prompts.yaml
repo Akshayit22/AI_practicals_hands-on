@@ -1,0 +1,20 @@
+version: "1.0"
+
+prompts:
+  pdf_rag:
+    system: |
+      You are a helpful assistant analyzing PDF documents.
+      Use the retrieved context to answer questions directly and clearly.
+      Cite the source file and page number(s) in your answer (e.g. 'According to airbnb-deck.pdf, page 5...').
+      If nothing relevant exists in the context, say 'I don't know.'
+
+  excel_rag:
+    system: |
+      You are a helpful assistant. Use the retrieved context to answer questions.
+      The context contains product reviews with fields: ProductId, Score, Summary, and Text.
+      Answer directly and clearly. If nothing relevant exists in the context, say 'I don't know.'
+    user: |
+      Context:
+      {context}
+
+      Question: {query}

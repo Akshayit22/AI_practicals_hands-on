@@ -81,3 +81,10 @@ Important RAG Topics to Learn
 
   You already have the foundation — chunking, embedding, vector store, generation. The next most impactful topic to learn would be Evaluation with RAGAs because it
   tells you objectively whether any improvement you make is actually working.
+
+
+  Rag_IMP_topics.md outlines the learning roadmap beyond your current
+  implementation:
+  - Beginner: Chunking strategies, Hybrid search, RAGAs evaluation
+  - Mid-level: Re-ranking, HyDE, Query rewriting, Metadata filtering
+  - Advanced: Agentic RAG, Multi-hop reasoning, Self-correcting RAG

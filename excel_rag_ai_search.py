@@ -14,6 +14,7 @@ Usage
 """
 
 import os
+import yaml
 import pandas as pd
 from datetime import datetime
 
@@ -21,6 +22,17 @@ from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import AzureSearch
 from langchain_core.documents import Document
+
+# ─────────────────────────────────────────────
+# Load prompts from config
+# ─────────────────────────────────────────────
+
+_PROMPTS_PATH = os.path.join(os.path.dirname(__file__), "config", "prompts.yaml")
+with open(_PROMPTS_PATH) as f:
+    _PROMPTS = yaml.safe_load(f)["prompts"]["excel_rag"]
+
+SYSTEM_PROMPT        = _PROMPTS["system"].strip()
+USER_PROMPT_TEMPLATE = _PROMPTS["user"].strip()
 
 # ─────────────────────────────────────────────
 # CONFIG — fill in your Azure credentials here
@@ -151,17 +163,13 @@ def generate_answer(
 
     system_message = {
         "role": "system",
-        "content": (
-            "You are a helpful assistant. Use the retrieved context to answer questions.\n"
-            "The context contains product reviews with fields: ProductId, Score, Summary, and Text.\n"
-            "Answer directly and clearly. If nothing relevant exists in the context, say 'I don't know.'"
-        ),
+        "content": SYSTEM_PROMPT,
     }
 
-    # Current user message includes the retrieved context
+    # Current user message — template filled with retrieved context + query
     user_message = {
         "role": "user",
-        "content": f"Context:\n{context}\n\nQuestion: {query}",
+        "content": USER_PROMPT_TEMPLATE.format(context=context, query=query),
     }
 
     # Build full message list: system + trimmed history + current question

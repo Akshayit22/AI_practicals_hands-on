@@ -16,12 +16,23 @@ Usage
 
 import os
 import fitz  # PyMuPDF
+import yaml
 from datetime import datetime
 
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import AzureSearch
 from langchain_core.documents import Document
+
+# ─────────────────────────────────────────────
+# Load prompts from config
+# ─────────────────────────────────────────────
+
+_PROMPTS_PATH = os.path.join(os.path.dirname(__file__), "config", "prompts.yaml")
+with open(_PROMPTS_PATH) as f:
+    _PROMPTS = yaml.safe_load(f)["prompts"]["pdf_rag"]
+
+SYSTEM_PROMPT = _PROMPTS["system"].strip()
 
 # ─────────────────────────────────────────────
 # CONFIG — fill in your Azure credentials here
@@ -185,12 +196,7 @@ def generate_answer(
 
     system_message = {
         "role": "system",
-        "content": (
-            "You are a helpful assistant analyzing PDF documents.\n"
-            "Use the retrieved context to answer questions directly and clearly.\n"
-            "Cite the source file and page number(s) in your answer (e.g. 'According to airbnb-deck.pdf, page 5...').\n"
-            "If nothing relevant exists in the context, say 'I don't know.'"
-        ),
+        "content": SYSTEM_PROMPT,
     }
 
     user_message = {
