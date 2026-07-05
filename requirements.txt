@@ -51,3 +51,8 @@ python-magic==0.4.27
 
 # Display helpers used in the notebook
 ipython==7.34.0
+
+# Agentic AI (Agentic_AI/ learning modules)
+langgraph<0.3            # pinned <0.3 for compatibility with langchain-core==0.3.72 above
+mcp                       # Model Context Protocol SDK (module 06_mcp_protocol)
+langfuse                  # tracing/observability (module 09_observability_evals)

@@ -27,3 +27,8 @@ data/
 *.csv
 *.xlsx
 *.xls
+
+# Agentic AI learning modules — generated indexes/artifacts
+Agentic_AI/**/long_term_memory_index/
+Agentic_AI/**/*_index/
+Agentic_AI/**/faiss_index/
