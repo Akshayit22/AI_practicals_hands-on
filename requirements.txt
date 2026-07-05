@@ -1,3 +1,8 @@
+# Agentic practical
+langgraph
+langchain-groq
+python-dotenv
+
 # Core LangChain + OpenAI
 langchain==0.3.27
 langchain-core==0.3.72
