@@ -5,10 +5,15 @@ python-dotenv
 tavily
 
 # Core LangChain + OpenAI
-langchain==0.3.27
-langchain-core==0.3.72
-langchain-community==0.3.27
-langchain-openai==0.3.27
+# langchain
+# langchain-core
+# langchain-community
+# langchain-openai
+langchain>=1.0.0
+langchain-core>=1.4.4
+langchain-text-splitters>=1.1.2
+langchain-classic==1.0.8
+langgraph-prebuilt>=1.1.0
 openai==1.109.1
 
 # Vector store
@@ -59,6 +64,5 @@ python-magic==0.4.27
 ipython==7.34.0
 
 # Agentic AI (Agentic_AI/ learning modules)
-langgraph<0.3            # pinned <0.3 for compatibility with langchain-core==0.3.72 above
 mcp                       # Model Context Protocol SDK (module 06_mcp_protocol)
 langfuse                  # tracing/observability (module 09_observability_evals)

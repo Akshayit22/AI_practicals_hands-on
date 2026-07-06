@@ -6,8 +6,6 @@ load_dotenv()
 
 from langchain.tools import tool
 from langchain_groq import ChatGroq
-from langchain.agents import create_agent
-from langchain.agents.middleware import wrap_tool_call
 from langchain_core.messages import HumanMessage, ToolMessage
 from tavily import TavilyClient
 from rich import print
@@ -42,32 +40,20 @@ tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 @tool
 def get_news(city: str) -> str:
-    """Get latest news about a city"""
+    "get latest news for city"
     
     response = tavily_client.search(
-        query=f"latest news in {city}",
+        query=f"fetch latest news in city: {city} in english",
         search_depth="basic",
         max_results=3
     )
-    
     results = response.get("results", [])
     
     if not results:
         return f"No news found for {city}"
     
-    news_list = []
-    
-    for r in results:
-        title = r.get("title", "No title")
-        url = r.get("url", "")
-        snippet = r.get("content", "")
+    return results
         
-        news_list.append(
-            f"- {title}\n  🔗 {url}\n  📝 {snippet[:100]}..."
-        )
-    
-    return f"Latest news in {city}:\n\n" + "\n\n".join(news_list)
-
 # response = get_news.invoke("Nashik")
 # print(response)
 
@@ -75,35 +61,48 @@ def get_news(city: str) -> str:
 
 llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
 
-@wrap_tool_call
-def human_approval(request, handler):
-    """Ask for human approval before every tool call."""
-    tool_name = request.tool_call["name"]
-    confirm = input(f"Agent wants to call '{tool_name}'. Approve? (yes/no): ")
+tools = {
+    "get_weather": get_weather,
+    "get_news": get_news
+}
 
-    if confirm.lower() != "yes":
-        return ToolMessage(
-            content="Tool call denied by user.",
-            tool_call_id=request.tool_call["id"]
-        )
+llm_with_tools = llm.bind_tools([get_weather,get_news])
 
-    return handler(request)  
+# Agent Loop - very important
+messages = []
 
-agent = create_agent(
-    llm,
-    tools = [get_weather,get_news],
-    system_prompt= "you are a helpful city assistant.",
-    middleware= [human_approval]
-)
-
-print("City Agent | type exit to quit")
+print("City intelligence system")
+print("type exit to quit")
 
 while True:
     user_input = input("You : ")
     if user_input.lower() == "exit":
-        break 
-    result = agent.invoke({
-        "messages": [{"role": "user", "content": user_input}]
-    })
+        break
+    messages.append(HumanMessage(content=user_input))
 
-    print("bot : ", result['messages'][-1].content )
+    while True:
+        result = llm_with_tools.invoke(messages)
+        messages.append(result)
+        
+        # check if tool is required
+        if result.tool_calls:
+            for tool_call in result.tool_calls:
+                tool_name = tool_call["name"]
+                # human in the loop
+                confirm = input(f"Agent want to user {tool_name} Agent, Approce (yes/no)")
+                if confirm.lower() == "no":
+                    print()
+                    break
+                
+                # excute tool
+                tool_result = tools[tool_name].invoke(tool_call)
+                
+                messages.append(ToolMessage(
+                    content=tool_result,
+                    tool_call_id = tool_call['id']
+                ))
+                
+            continue
+        else:
+            print(result.content)
+            break
