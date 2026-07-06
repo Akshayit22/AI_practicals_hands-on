@@ -2,6 +2,7 @@
 langgraph
 langchain-groq
 python-dotenv
+tavily
 
 # Core LangChain + OpenAI
 langchain==0.3.27
