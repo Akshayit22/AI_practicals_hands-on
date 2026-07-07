@@ -3,6 +3,11 @@ langgraph
 langchain-groq
 python-dotenv
 tavily
+langchain-community
+langchain-huggingface
+sentence-transformers
+faiss-cpu
+pypdf
 
 # Core LangChain + OpenAI
 # langchain
