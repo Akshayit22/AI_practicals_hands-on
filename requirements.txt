@@ -8,6 +8,7 @@ langchain-huggingface
 sentence-transformers
 faiss-cpu
 pypdf
+langchain_tavily
 
 # Core LangChain + OpenAI
 # langchain
