@@ -9,6 +9,7 @@ sentence-transformers
 faiss-cpu
 pypdf
 langchain_tavily
+mcp
 
 # Core LangChain + OpenAI
 # langchain
