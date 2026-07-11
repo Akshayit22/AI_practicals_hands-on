@@ -3,11 +3,11 @@ from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
-from langchain_groq import ChatGroq
 from langchain_tavily import TavilySearch
 from langchain_core.messages import ToolMessage
-from groq import BadRequestError
 from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from rich import print
 
 load_dotenv()
 
@@ -18,13 +18,32 @@ tools = [search_tool]
 tool_node = ToolNode(tools)
 
 # llm
+API_KEY  = os.environ["AZURE_AI_API_KEY"]
+BASE_URL = os.environ["AZURE_AI_BASE_URL"]
+MODEL    = os.getenv("AZURE_AI_MODEL", "DeepSeek-V3.2")
 
 #writter 
-writer_llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.7)
+writer_llm = ChatOpenAI(
+    model=MODEL,
+    base_url=BASE_URL,
+    api_key=API_KEY,
+    temperature=0.7,
+    max_tokens=1000,
+    timeout=60,
+    default_headers={"api-key": API_KEY},
+)
 writer_llm_with_tools = writer_llm.bind_tools(tools)
 
 #reviewer
-reviewer_llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.2)
+reviewer_llm = ChatOpenAI(
+    model=MODEL,
+    base_url=BASE_URL,
+    api_key=API_KEY,
+    temperature=0.2,
+    max_tokens=1000,
+    timeout=60,
+    default_headers={"api-key": API_KEY},
+)
 
 #state building 
 class State(TypedDict):
@@ -70,16 +89,21 @@ def writer_node(state: State) -> dict:
     """Writes (or rewrites) the LinkedIn post. Can call Tavily to search first."""
     history = list(state.get('messages', []))
 
-    # # If we're resuming after a web search, just continue with the tool results.
-    # if history and isinstance(history[-1], ToolMessage):
-    #     response = writer_llm_with_tools.invoke(history)
-    #     print("draft ->",response.content)
-    #     return {"messages": [response], "attempt": state.get('attempt', 0)}
+    # If we're resuming after a web search, continue with the tool results
+    # so the writer produces the actual post text (do not bump the attempt).
+    if history and isinstance(history[-1], ToolMessage):
+        print("in the history section in writter")
+        response = writer_llm_with_tools.invoke(
+            [("system", WRITER_SYSTEM_PROMPT)] + history
+        )
+        return {"messages": [response], "attempt": state.get('attempt', 0)}
 
     attempt = state.get('attempt',0) + 1
     topic = state.get('topic')
     previous_feedback = state.get('review_feedback')
     draft = state.get('draft',"None")
+    
+    print("In writer_node")
 
     if attempt == 1:
         user_message = (
@@ -95,14 +119,10 @@ def writer_node(state: State) -> dict:
             f"do not repeat the same mistake"
         )
     messages = [("system",WRITER_SYSTEM_PROMPT),("human",user_message)]
-    try:
-        response = writer_llm_with_tools.invoke(messages)
-    except BadRequestError:
-        # Groq's Llama sometimes emits malformed tool-call syntax (tool_use_failed).
-        # Fall back to writing directly, without the search tool, so we don't crash.
-        print("[tool call failed — writing without web search]")
-        response = writer_llm.invoke(messages)
-
+    
+    response = writer_llm_with_tools.invoke(messages)
+    print(response)
+    
     return {
         "messages":[("human", user_message), response],
         "attempt": attempt
@@ -120,7 +140,7 @@ def extract_draft_node(state:State) -> dict:
 def reviewer_node(state:State) -> dict:
     """Reviews the draft and decides: approve or reject with feedback."""
     draft = state['draft']
-
+    print("In reviewer_node")
     prompt = (
         f"review this LinkedIn post draft : \n"
         f"{draft}\n"
@@ -148,17 +168,19 @@ def reviewer_node(state:State) -> dict:
 # router functions
 def should_use_tool(state:State):
     last_message = state['messages'][-1]
-    if getattr(last_message,'tool_calls', None):
+    if getattr(last_message,'tool_calls',None):
+        print("should_use_tool with tool_Call")
         return "tools"
+    print("should_use_tool without tool")
     return "extract_draft"
 
 def should_stop_looping(state:State):
-    if state["is_approved"] :
+    if state['is_approved']:
         print("post haas been approved \n")
         return END
-    if state["attempt"] >= 3:
+    if state['attempt'] >= 2:
         print("reached max attempts")
-        return END 
+        return END
     return "writter"
 
 
@@ -178,7 +200,7 @@ graph.add_conditional_edges(
     "writter",should_use_tool
 )
 
-graph.add_edge("tools", "writter") # confusion should use reviewer
+graph.add_edge("tools", "writter")  # after searching, go back to the writer to draft
 graph.add_edge("extract_draft", "reviewer")
 
 graph.add_conditional_edges(
@@ -207,7 +229,7 @@ else:
         "topic": topic,
         "messages": [],
         "draft": "",
-        "reviewer_feedback":"",
+        "review_feedback":"",
         "attempt": 0,
         "is_approved": False
     }
