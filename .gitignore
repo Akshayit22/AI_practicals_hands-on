@@ -11,9 +11,10 @@ __pycache__/
 # Jupyter checkpoints
 .ipynb_checkpoints/
 
-# Environment variables
+# Environment variables (never commit real secrets)
 .env
 *.env
+!example.env
 
 # macOS
 .DS_Store

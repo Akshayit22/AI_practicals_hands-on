@@ -35,20 +35,31 @@ with open(_PROMPTS_PATH) as f:
 SYSTEM_PROMPT = _PROMPTS["system"].strip()
 
 # ─────────────────────────────────────────────
-# CONFIG — fill in your Azure credentials here
+# CONFIG — credentials loaded from environment / .env
 # ─────────────────────────────────────────────
+# Copy .env.example to .env and fill in your Azure credentials.
+# Never hardcode secrets in this file.
 
-# Azure OpenAI
-os.environ["AZURE_OPENAI_API_KEY"]  = "***REMOVED-AZURE-OPENAI-KEY***"
-os.environ["AZURE_OPENAI_ENDPOINT"] = "https://akstel395.openai.azure.com/"
+from dotenv import load_dotenv
+
+load_dotenv()
+
+_REQUIRED_ENV = [
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AZURE_SEARCH_ENDPOINT",
+    "AZURE_SEARCH_KEY",
+]
+_missing = [k for k in _REQUIRED_ENV if not os.environ.get(k)]
+if _missing:
+    raise RuntimeError(
+        f"Missing required environment variables: {', '.join(_missing)}. "
+        "Copy .env.example to .env and fill in your Azure credentials."
+    )
 
 AZURE_EMBEDDING_DEPLOYMENT = "text-embedding-3-large"   # your embedding deployment name
 AZURE_CHAT_DEPLOYMENT      = "gpt-4o"                   # your chat deployment name
 AZURE_API_VERSION          = "2024-08-01-preview"
-
-# Azure AI Search
-os.environ["AZURE_SEARCH_ENDPOINT"] = "https://akshay395.search.windows.net"
-os.environ["AZURE_SEARCH_KEY"]      = "***REMOVED-AZURE-SEARCH-KEY***"
 
 AZURE_SEARCH_INDEX = "pdf-rag-index-policy-doc"   # auto-created on first run
 
