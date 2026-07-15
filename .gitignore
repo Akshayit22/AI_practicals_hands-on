@@ -24,7 +24,6 @@ __pycache__/
 .idea/
 
 # Data files (optional — remove if you want to track them)
-data/
 *.csv
 *.xlsx
 *.xls
